@@ -4,16 +4,12 @@
 const API_BASE = "https://script.google.com/macros/s/AKfycbw--Vdhxhl2znuw_xDvAJiW7ZNyXbj4jKDwwHKG9B3VJNzbDt0jwaMBYnEo8f2GhtGT/exec";
 const OAUTH_CLIENT_ID = "311839636060-a95bamqa6h8gst67tlcgo2puc3frrf9i.apps.googleusercontent.com";
 
-const SPREADSHEET_ID = "1rJwf2PmsFyRRGoi160e5nbljfaLOY-KEniZ01M04ruc";
-
 const OAUTH_SCOPES = [
   "openid",
   "email",
   "profile",
   "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/userinfo.profile",
-  "https://www.googleapis.com/auth/drive.metadata.readonly",
-  "https://www.googleapis.com/auth/spreadsheets.readonly"
+  "https://www.googleapis.com/auth/userinfo.profile"
 ].join(" ");
 
 const LS_OAUTH = "english_study_oauth_token_v1";
@@ -253,6 +249,16 @@ function clearStoredOAuthEmail() {
   } catch {}
 }
 
+function resetOAuthDebug() {
+  clearStoredOAuth();
+  clearStoredOAuthEmail();
+  oauthAccessToken = "";
+  oauthExpiresAt = 0;
+  console.log("OAuth reseteado");
+}
+
+window.resetOAuthDebug = resetOAuthDebug;
+
 function isTokenValid() {
   return !!oauthAccessToken && Date.now() < (oauthExpiresAt - 10000);
 }
@@ -284,14 +290,16 @@ function initOAuth() {
     client_id: OAUTH_CLIENT_ID,
     scope: OAUTH_SCOPES,
     include_granted_scopes: true,
-    use_fedcm_for_prompt: true,
     callback: () => {}
   });
+
+  console.log("OAuth inicializado OK");
 }
 
 function requestAccessToken({ prompt, hint } = {}) {
   return new Promise((resolve, reject) => {
     if (!tokenClient) return reject(new Error("OAuth no inicializado"));
+
     let done = false;
 
     const timer = setTimeout(() => {
@@ -305,16 +313,21 @@ function requestAccessToken({ prompt, hint } = {}) {
       done = true;
       clearTimeout(timer);
 
+      console.log("OAuth callback raw:", resp);
+
       if (!resp || resp.error) {
         const err = String(resp?.error || "oauth_error");
         const sub = String(resp?.error_subtype || "");
         const msg = (err + (sub ? `:${sub}` : "")).toLowerCase();
+
         const e = new Error(err);
-        e.isCanceled = msg.includes("popup_closed") ||
+        e.isCanceled =
+          msg.includes("popup_closed") ||
           msg.includes("popup_closed_by_user") ||
           msg.includes("access_denied") ||
           msg.includes("user_cancel") ||
           msg.includes("interaction_required");
+
         return reject(e);
       }
 
@@ -325,12 +338,19 @@ function requestAccessToken({ prompt, hint } = {}) {
       oauthAccessToken = accessToken;
       oauthExpiresAt = expiresAt;
       saveStoredOAuth(accessToken, expiresAt);
+
       resolve({ access_token: accessToken, expires_at: expiresAt });
     };
 
     const req = {};
     if (prompt !== undefined) req.prompt = prompt;
-    if (hint && hint.includes("@")) req.hint = hint;
+
+    // OJO: solo usamos hint en silent, no en interactivo
+    if (prompt === "" && hint && hint.includes("@")) {
+      req.hint = hint;
+    }
+
+    console.log("requestAccessToken req:", req);
 
     try {
       tokenClient.requestAccessToken(req);
@@ -353,21 +373,32 @@ async function ensureOAuthToken(allowInteractive = false, interactivePrompt = "c
 
   const hintEmail = loadStoredOAuthEmail();
 
-  if (!allowInteractive && !hintEmail) {
+  // Si el usuario hizo click en conectar, forzamos popup directo.
+  if (allowInteractive) {
+    await requestAccessToken({
+      prompt: interactivePrompt ?? "consent"
+    });
+
+    if (!isTokenValid()) throw new Error("TOKEN_NEEDS_INTERACTIVE");
+    return oauthAccessToken;
+  }
+
+  // Modo silencioso real
+  if (!hintEmail) {
     throw new Error("TOKEN_NEEDS_INTERACTIVE");
   }
 
   try {
-    await requestAccessToken({ prompt: "", hint: hintEmail || undefined });
-    if (isTokenValid()) return oauthAccessToken;
+    await requestAccessToken({
+      prompt: "",
+      hint: hintEmail || undefined
+    });
+
+    if (!isTokenValid()) throw new Error("TOKEN_NEEDS_INTERACTIVE");
+    return oauthAccessToken;
   } catch (e) {
-    if (!allowInteractive) throw new Error("TOKEN_NEEDS_INTERACTIVE");
+    throw new Error("TOKEN_NEEDS_INTERACTIVE");
   }
-
-  await requestAccessToken({ prompt: interactivePrompt ?? "consent", hint: hintEmail || undefined });
-
-  if (!isTokenValid()) throw new Error("TOKEN_NEEDS_INTERACTIVE");
-  return oauthAccessToken;
 }
 
 // =====================
@@ -1043,6 +1074,14 @@ studyList.addEventListener("change", (e) => {
 });
 
 btnConnect.addEventListener("click", async () => {
+  console.log("CLICK Conectar", {
+    mode: btnConnect.dataset.mode,
+    oauthAccessToken,
+    oauthExpiresAt,
+    storedEmail: loadStoredOAuthEmail(),
+    storedToken: loadStoredOAuth()
+  });
+
   if (btnConnect.dataset.mode === "switch") {
     const prevStored = loadStoredOAuth();
     const prevEmail = loadStoredOAuthEmail();
@@ -1074,7 +1113,13 @@ btnConnect.addEventListener("click", async () => {
     return;
   }
 
-  const res = await runConnectFlow({ interactive: true, prompt: "consent" });
+  // Limpieza previa para evitar que quede una sesión rota guardada
+  clearStoredOAuth();
+  clearStoredOAuthEmail();
+  oauthAccessToken = "";
+  oauthExpiresAt = 0;
+
+  const res = await runConnectFlow({ interactive: true, prompt: "select_account" });
 
   if (!res?.ok && !res?.canceled) {
     console.error("ERROR conectar:", res);
