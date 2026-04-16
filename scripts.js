@@ -48,14 +48,14 @@ const statStarred = document.getElementById("statStarred");
 const progressText = document.getElementById("progressText");
 const progressFill = document.getElementById("progressFill");
 
-const itemType = document.getElementById("itemType");
-const itemLevel = document.getElementById("itemLevel");
-const itemGroup = document.getElementById("itemGroup");
-const itemTopic = document.getElementById("itemTopic");
-const itemText = document.getElementById("itemText");
-const itemTranslation = document.getElementById("itemTranslation");
-const itemNotes = document.getElementById("itemNotes");
-const btnAddItem = document.getElementById("btnAddItem");
+const itemType = null;
+const itemLevel = null;
+const itemGroup = null;
+const itemTopic = null;
+const itemText = null;
+const itemTranslation = null;
+const itemNotes = null;
+const btnAddItem = null;
 
 const bulkInput = document.getElementById("bulkInput");
 const btnImportBulk = document.getElementById("btnImportBulk");
@@ -63,10 +63,10 @@ const btnLoadSample = document.getElementById("btnLoadSample");
 
 const btnExportProgress = document.getElementById("btnExportProgress");
 const btnExportItems = document.getElementById("btnExportItems");
-const btnMarkVisibleKnown = document.getElementById("btnMarkVisibleKnown");
-const btnMarkVisibleUnknown = document.getElementById("btnMarkVisibleUnknown");
-const btnToggleTranslations = document.getElementById("btnToggleTranslations");
-const btnOnlyUnknown = document.getElementById("btnOnlyUnknown");
+const btnMarkVisibleKnown = null;
+const btnMarkVisibleUnknown = null;
+const btnToggleTranslations = null;
+const btnOnlyUnknown = null;
 const visibleCount = document.getElementById("visibleCount");
 const studyList = document.getElementById("studyList");
 const toastRoot = document.getElementById("toastRoot");
@@ -507,6 +507,11 @@ function fillSelect(select, values, firstLabel) {
   }
 }
 
+function applyStudyModeLayout() {
+  // Layout fijo en HTML.
+  // Esta función queda vacía para no mover ni romper nodos.
+}
+
 function getVisibleItems() {
   const query = normalizeStr(searchInput.value).toLowerCase();
   const status = statusFilter.value;
@@ -600,14 +605,29 @@ function render() {
             <span class="badge">Grupo ${escapeHtml(it.group_name)}</span>
             <span class="badge">${escapeHtml(it.topic || "general")}</span>
           </div>
+
           <div class="item-text">${escapeHtml(it.text)}</div>
           <div class="item-translation ${showTranslations ? "" : "hidden"}">${escapeHtml(it.translation || "")}</div>
           ${it.notes ? `<div class="item-notes">${escapeHtml(it.notes)}</div>` : ``}
         </div>
+
         <div class="item-actions">
-          <label class="toggle-wrap"><input type="checkbox" data-action="known" data-id="${escapeHtml(it.id)}" ${it.known ? "checked" : ""}> Ya sé</label>
-          <button type="button" class="btn-secondary" data-action="star" data-id="${escapeHtml(it.id)}">${it.starred ? "★ Favorita" : "☆ Favorita"}</button>
-          <button type="button" class="btn-secondary" data-action="delete" data-id="${escapeHtml(it.id)}">Eliminar</button>
+          <button
+            type="button"
+            class="btn-known ${it.known ? "active" : ""}"
+            data-action="known"
+            data-id="${escapeHtml(it.id)}"
+          >
+            ${it.known ? "Ya sé" : "Marcar como ya sé"}
+          </button>
+
+          <button type="button" class="btn-secondary" data-action="star" data-id="${escapeHtml(it.id)}">
+            ${it.starred ? "★ Favorita" : "☆ Favorita"}
+          </button>
+
+          <button type="button" class="btn-secondary" data-action="delete" data-id="${escapeHtml(it.id)}">
+            Eliminar
+          </button>
         </div>
       </div>
     `;
@@ -942,25 +962,6 @@ async function reconnectAndRefresh() {
 // =====================
 // EVENTS
 // =====================
-btnAddItem.addEventListener("click", () => {
-  const ok = addOneItem({
-    type: itemType.value,
-    level: itemLevel.value || "Core",
-    group_name: itemGroup.value || "1",
-    topic: itemTopic.value || "general",
-    text: itemText.value,
-    translation: itemTranslation.value,
-    notes: itemNotes.value
-  });
-
-  if (!ok) return;
-
-  itemText.value = "";
-  itemTranslation.value = "";
-  itemNotes.value = "";
-  itemText.focus();
-});
-
 btnImportBulk.addEventListener("click", () => {
   const lines = bulkInput.value.split("\n").map(x => x.trim()).filter(Boolean);
   if (!lines.length) {
@@ -998,40 +999,6 @@ btnExportItems.addEventListener("click", () => {
   exportJson("english-study-items.json", items);
 });
 
-btnMarkVisibleKnown.addEventListener("click", () => {
-  const visible = getVisibleItems();
-  visible.forEach(it => {
-    const idx = items.findIndex(x => x.id === it.id);
-    if (idx !== -1) items[idx].known = true;
-  });
-  localVersion++;
-  saveCache();
-  render();
-  scheduleSave("Visibles marcados como ya sé");
-});
-
-btnMarkVisibleUnknown.addEventListener("click", () => {
-  const visible = getVisibleItems();
-  visible.forEach(it => {
-    const idx = items.findIndex(x => x.id === it.id);
-    if (idx !== -1) items[idx].known = false;
-  });
-  localVersion++;
-  saveCache();
-  render();
-  scheduleSave("Visibles marcados como no sé");
-});
-
-btnToggleTranslations.addEventListener("click", () => {
-  showTranslations = !showTranslations;
-  render();
-});
-
-btnOnlyUnknown.addEventListener("click", () => {
-  statusFilter.value = statusFilter.value === "unknown" ? "" : "unknown";
-  render();
-});
-
 [viewMode, levelFilter, groupFilter, statusFilter, topicFilter, sortMode].forEach(el => {
   el.addEventListener("change", render);
 });
@@ -1054,6 +1021,12 @@ studyList.addEventListener("click", (e) => {
   const action = btn.dataset.action;
   const id = btn.dataset.id;
 
+  if (action === "known") {
+    const current = items.find(it => it.id === id);
+    updateItem(id, { known: !current?.known });
+    return;
+  }
+
   if (action === "star") {
     const current = items.find(it => it.id === id);
     updateItem(id, { starred: !current?.starred });
@@ -1063,14 +1036,6 @@ studyList.addEventListener("click", (e) => {
   if (action === "delete") {
     deleteItem(id);
   }
-});
-
-studyList.addEventListener("change", (e) => {
-  const target = e.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  if (target.dataset.action !== "known") return;
-
-  updateItem(target.dataset.id, { known: target.checked });
 });
 
 btnConnect.addEventListener("click", async () => {
@@ -1207,5 +1172,11 @@ window.addEventListener("load", async () => {
   }
 
   bulkInput.value = SAMPLE_BULK;
+
+  if ([...viewMode.options].some(o => o.value === "all")) {
+    viewMode.value = "all";
+  }
+
+  applyStudyModeLayout();
   render();
 });
