@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>English Study Tracker</title>
+  <link rel="stylesheet" href="./estilos.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="title-wrap">
+      <div>
+        <h1>English Study Tracker</h1>
+        <p class="subtitle">Frases, palabras y progreso sincronizado</p>
+      </div>
+      <div class="header-right">
+        <div id="syncPill" class="sync-pill"><span class="sync-dot"></span><span class="sync-text">Cargando…</span></div>
+        <div class="header-actions">
+          <button id="btnConnect" type="button" class="btn-primary" data-mode="connect">Conectar</button>
+          <button id="btnRefresh" type="button" class="btn-secondary hidden" title="Reintentar">↻</button>
+        </div>
+        <div id="accountPill" class="account-pill hidden"></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card controls-card">
+      <div class="toolbar-grid">
+        <div class="field">
+          <label for="viewMode">Vista</label>
+          <select id="viewMode">
+            <option value="phrases">Frases</option>
+            <option value="words">Palabras</option>
+            <option value="all">Todo</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="levelFilter">Nivel</label>
+          <select id="levelFilter">
+            <option value="">Todos</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="groupFilter">Grupo</label>
+          <select id="groupFilter">
+            <option value="">Todos</option>
+          </select>
+        </div>
+
+        <div class="field field-grow">
+          <label for="searchInput">Buscar</label>
+          <div class="search-wrap">
+            <input id="searchInput" type="text" placeholder="Buscar frase, palabra, traducción, nota..." />
+            <button id="btnClearSearch" type="button" class="btn-secondary hidden">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-grid second-row">
+        <div class="field">
+          <label for="statusFilter">Estado</label>
+          <select id="statusFilter">
+            <option value="">Todos</option>
+            <option value="known">Ya sé</option>
+            <option value="unknown">No sé</option>
+            <option value="starred">Favoritos</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="topicFilter">Tema</label>
+          <select id="topicFilter">
+            <option value="">Todos</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="sortMode">Orden</label>
+          <select id="sortMode">
+            <option value="level">Nivel / grupo</option>
+            <option value="alpha">Alfabético</option>
+            <option value="knownFirst">Ya sé primero</option>
+            <option value="unknownFirst">No sé primero</option>
+          </select>
+        </div>
+
+        <div class="toolbar-actions">
+          <button id="btnExportProgress" type="button" class="btn-secondary">Exportar progreso</button>
+          <button id="btnExportItems" type="button" class="btn-secondary">Exportar items</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <section class="card summary-card">
+        <h2>Resumen</h2>
+        <div class="stats-grid">
+          <div class="stat-box"><span class="stat-label">Total</span><strong id="statTotal">0</strong></div>
+          <div class="stat-box"><span class="stat-label">Ya sé</span><strong id="statKnown">0</strong></div>
+          <div class="stat-box"><span class="stat-label">Pendientes</span><strong id="statUnknown">0</strong></div>
+          <div class="stat-box"><span class="stat-label">Favoritas</span><strong id="statStarred">0</strong></div>
+        </div>
+        <div class="progress-block">
+          <div class="progress-label-row">
+            <span>Avance</span>
+            <strong id="progressText">0%</strong>
+          </div>
+          <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card quick-actions-card">
+        <h2>Acciones rápidas</h2>
+        <div class="quick-actions">
+          <button id="btnMarkVisibleKnown" type="button" class="btn-secondary">Marcar visibles como “ya sé”</button>
+          <button id="btnMarkVisibleUnknown" type="button" class="btn-secondary">Marcar visibles como “no sé”</button>
+          <button id="btnToggleTranslations" type="button" class="btn-secondary">Mostrar/ocultar traducciones</button>
+          <button id="btnOnlyUnknown" type="button" class="btn-secondary">Ver solo pendientes</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="grid-2">
+      <section class="card add-card">
+        <h2>Agregar item</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label for="itemType">Tipo</label>
+            <select id="itemType">
+              <option value="phrase">Frase</option>
+              <option value="word">Palabra</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="itemLevel">Nivel</label>
+            <input id="itemLevel" type="text" placeholder="A1 / A2 / B1 / Tech / Core" />
+          </div>
+          <div class="field">
+            <label for="itemGroup">Grupo</label>
+            <input id="itemGroup" type="number" min="1" placeholder="1" />
+          </div>
+          <div class="field">
+            <label for="itemTopic">Tema</label>
+            <input id="itemTopic" type="text" placeholder="cotidiano / tech / programación" />
+          </div>
+          <div class="field field-grow full-row">
+            <label for="itemText">Texto en inglés</label>
+            <input id="itemText" type="text" placeholder="I need to update the server." />
+          </div>
+          <div class="field field-grow full-row">
+            <label for="itemTranslation">Traducción / ayuda</label>
+            <input id="itemTranslation" type="text" placeholder="Necesito actualizar el servidor." />
+          </div>
+          <div class="field field-grow full-row">
+            <label for="itemNotes">Notas</label>
+            <input id="itemNotes" type="text" placeholder="Usada en contexto técnico" />
+          </div>
+          <div class="field full-row">
+            <button id="btnAddItem" type="button" class="btn-primary">Agregar item</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card import-card">
+        <h2>Importar listado</h2>
+        <p class="helper-text">Formato recomendado: una línea por item con columnas separadas por |</p>
+        <p class="helper-text mono">type|level|group|topic|text|translation|notes</p>
+        <textarea id="bulkInput" rows="10" placeholder="phrase|A1|1|daily|How are you?|¿Cómo estás?|saludo básico"></textarea>
+        <div class="import-actions">
+          <button id="btnImportBulk" type="button" class="btn-primary">Importar listado</button>
+          <button id="btnLoadSample" type="button" class="btn-secondary">Cargar ejemplo</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="card list-card">
+      <div class="list-header">
+        <h2>Items de estudio</h2>
+        <div id="visibleCount" class="visible-count">0 visibles</div>
+      </div>
+      <div id="studyList" class="study-list"></div>
+    </section>
+  </main>
+
+  <div id="toastRoot" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="./scripts.js"></script>
+</body>
+</html>
