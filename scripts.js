@@ -262,6 +262,9 @@ function resetOAuthDebug() {
   clearStoredOAuthEmail();
   oauthAccessToken = "";
   oauthExpiresAt = 0;
+  localStorage.removeItem(LS_CACHE);
+  localStorage.removeItem(LS_PENDING);
+  items = [];
   console.log("OAuth reseteado");
 }
 
