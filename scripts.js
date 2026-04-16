@@ -385,23 +385,32 @@ async function apiPost_(payload) {
       redirect: "follow"
     });
   } catch (e) {
+    console.error("FETCH ERROR apiPost_:", e);
     return { ok: false, error: "network_error", detail: String(e?.message || e) };
   }
 
   try {
     text = await r.text();
   } catch (e) {
+    console.error("READ ERROR apiPost_:", e);
     return { ok: false, error: "read_error", detail: String(e?.message || e) };
   }
 
+  console.log("API RAW RESPONSE:", {
+    status: r.status,
+    ok: r.ok,
+    text
+  });
+
   if (!r.ok) {
-    return { ok: false, error: "http_error", status: r.status, detail: (text || "").slice(0, 800) };
+    return { ok: false, error: "http_error", status: r.status, detail: (text || "").slice(0, 1000) };
   }
 
   try {
     return JSON.parse(text);
-  } catch {
-    return { ok: false, error: "non_json", detail: (text || "").slice(0, 800) };
+  } catch (e) {
+    console.error("JSON PARSE ERROR apiPost_:", e);
+    return { ok: false, error: "non_json", detail: (text || "").slice(0, 1000) };
   }
 }
 
@@ -423,10 +432,14 @@ async function apiCall(mode, payload = {}, opts = {}) {
 
 async function verifyBackendAccessOrThrow(allowInteractive) {
   const data = await apiCall("whoami", {}, { allowInteractive });
+
+  console.log("WHOAMI RESPONSE:", data);
+
   if (!data?.ok) {
     const msg = (data?.error || "no_access") + (data?.detail ? ` | ${data.detail}` : "");
     throw new Error(msg);
   }
+
   return data;
 }
 
@@ -843,31 +856,41 @@ async function runConnectFlow({ interactive, prompt } = { interactive: false, pr
       try {
         await ensureOAuthToken(!!interactive, prompt || "consent");
       } catch (e) {
+        console.error("ERROR ensureOAuthToken:", e);
+
         if (e?.isCanceled) {
-          if (isTokenValid()) setSync("ok", "Listo ✅");
-          else {
+          if (isTokenValid()) {
+            setSync("ok", "Listo ✅");
+          } else {
             setSync("offline", "Necesita Conectar");
             btnRefresh.classList.remove("hidden");
           }
-          return { ok: false, canceled: true };
+          return { ok: false, canceled: true, error: "popup_cancelado" };
         }
+
         throw e;
       }
 
       const who = await verifyBackendAccessOrThrow(!!interactive);
+      console.log("WHOAMI OK:", who);
+
       const email = normalizeStr(who?.email);
       if (email) saveStoredOAuthEmail(email);
       setAccountUI(email);
 
       btnRefresh.classList.add("hidden");
       await refreshFromRemote(true, { skipEnsureToken: true });
+
       return { ok: true };
     } catch (e) {
+      console.error("ERROR runConnectFlow:", e);
+
       const msg = String(e?.message || e || "");
+
       if (msg === "TOKEN_NEEDS_INTERACTIVE") {
         setSync("offline", "Necesita Conectar");
         btnRefresh.classList.remove("hidden");
-        return { ok: false, needsInteractive: true };
+        return { ok: false, needsInteractive: true, error: msg };
       }
 
       setSync("offline", "Necesita Conectar");
@@ -1044,12 +1067,19 @@ btnConnect.addEventListener("click", async () => {
       return;
     }
 
-    if (!res?.ok) toast("No se pudo cambiar cuenta", "err");
+    if (!res?.ok) {
+      console.error("ERROR cambiar cuenta:", res);
+      toast("No se pudo cambiar cuenta", "err", res?.error || "sin detalle");
+    }
     return;
   }
 
   const res = await runConnectFlow({ interactive: true, prompt: "consent" });
-  if (!res?.ok && !res?.canceled) toast("No se pudo conectar", "err");
+
+  if (!res?.ok && !res?.canceled) {
+    console.error("ERROR conectar:", res);
+    toast("No se pudo conectar", "err", res?.error || "sin detalle");
+  }
 });
 
 btnRefresh.addEventListener("click", async () => {
