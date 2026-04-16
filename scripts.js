@@ -4,12 +4,20 @@
 const API_BASE = "https://script.google.com/macros/s/AKfycbw--Vdhxhl2znuw_xDvAJiW7ZNyXbj4jKDwwHKG9B3VJNzbDt0jwaMBYnEo8f2GhtGT/exec";
 const OAUTH_CLIENT_ID = "311839636060-a95bamqa6h8gst67tlcgo2puc3frrf9i.apps.googleusercontent.com";
 
+// ⚠️ IMPORTANTE:
+// Con SOLO openid/email/profile (+userinfo.*), Google permite login a cualquiera
+// aunque estés en Testing (excepción de OAuth).
+// Agregamos un scope extra para que Google respete los "test users".
+
 const OAUTH_SCOPES = [
   "openid",
   "email",
   "profile",
   "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/userinfo.profile"
+  "https://www.googleapis.com/auth/userinfo.profile",
+
+  // Este scope rompe la excepción
+  "https://www.googleapis.com/auth/drive.metadata.readonly"
 ].join(" ");
 
 const LS_OAUTH = "english_study_oauth_token_v1";
