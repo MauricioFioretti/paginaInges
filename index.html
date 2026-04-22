@@ -7,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>English Study Tracker</title>
   <link rel="stylesheet" href="./estilos.css" />
+  <link rel="icon" href="/img/favicon2.svg" type="image/png">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
@@ -63,13 +64,6 @@
             <div class="field desktop-only">
               <label for="typeFilter">Tipo</label>
               <select id="typeFilter">
-                <option value="">Todos</option>
-              </select>
-            </div>
-
-            <div class="field desktop-only">
-              <label for="ownerFilter">Usuario</label>
-              <select id="ownerFilter">
                 <option value="">Todos</option>
               </select>
             </div>
@@ -166,7 +160,8 @@
         <h2>Importar listado</h2>
         <p class="helper-text">Formato recomendado: una línea por item con columnas separadas por |</p>
         <p class="helper-text mono">type|level|group_name|view_name|topic|text|translation|notes</p>
-        <textarea id="bulkInput" placeholder="phrase|A1|1|daily|greetings|How are you?|¿Cómo estás?|saludo básico"></textarea>
+        <textarea id="bulkInput"
+          placeholder="phrase|A1|1|daily|greetings|How are you?|¿Cómo estás?|saludo básico"></textarea>
         <div class="import-actions">
           <button id="btnImportBulk" type="button" class="btn-primary">Importar listado</button>
           <button id="btnLoadSample" type="button" class="btn-secondary">Cargar ejemplo</button>

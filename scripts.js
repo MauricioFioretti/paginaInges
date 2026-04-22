@@ -546,12 +546,18 @@ function buildFilters() {
   fillSelect(levelFilter, levels, "Todos");
   fillSelect(groupFilter, groups, "Todos");
   fillSelect(typeFilter, types, "Todos");
-  fillSelect(ownerFilter, owners, "Todos");
+
+  if (ownerFilter) {
+    fillSelect(ownerFilter, owners, "Todos");
+  }
 }
 
 function fillSelect(select, values, firstLabel) {
+  if (!select) return;
+
   const current = select.value;
   select.innerHTML = "";
+
   const first = document.createElement("option");
   first.value = "";
   first.textContent = firstLabel;
@@ -580,7 +586,7 @@ function getVisibleItems() {
   const topic = topicFilter.value;
   const status = statusFilter.value;
   const type = typeFilter.value;
-  const owner = ownerFilter.value;
+  const owner = ownerFilter ? ownerFilter.value : "";
   const level = levelFilter.value;
   const group = groupFilter.value;
   const sort = sortMode.value;
