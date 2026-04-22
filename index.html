@@ -33,6 +33,7 @@
       <div class="top-study-grid">
         <section class="top-filters">
           <div class="toolbar-grid compact-toolbar">
+
             <div class="field">
               <label for="viewMode">Vista</label>
               <select id="viewMode">
@@ -49,7 +50,7 @@
               </select>
             </div>
 
-            <div class="field">
+            <div class="field desktop-only">
               <label for="statusFilter">Estado</label>
               <select id="statusFilter">
                 <option value="">Todos</option>
@@ -58,6 +59,31 @@
                 <option value="starred">Favoritos</option>
               </select>
             </div>
+
+            <div class="field desktop-only">
+              <label for="typeFilter">Tipo</label>
+              <select id="typeFilter">
+                <option value="">Todos</option>
+              </select>
+            </div>
+
+            <div class="field desktop-only">
+              <label for="ownerFilter">Usuario</label>
+              <select id="ownerFilter">
+                <option value="">Todos</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="translationMode">Traducción</label>
+              <select id="translationMode">
+                <option value="both">Inglés + traducción</option>
+                <option value="english">Solo inglés</option>
+                <option value="translation">Solo traducción</option>
+              </select>
+            </div>
+
+
           </div>
         </section>
 
@@ -139,9 +165,8 @@
       <section class="card import-card import-card-bottom">
         <h2>Importar listado</h2>
         <p class="helper-text">Formato recomendado: una línea por item con columnas separadas por |</p>
-        <p class="helper-text mono">type|level|group|topic|text|translation|notes</p>
-        <textarea id="bulkInput" rows="10"
-          placeholder="phrase|A1|1|daily|How are you?|¿Cómo estás?|saludo básico"></textarea>
+        <p class="helper-text mono">type|level|group_name|view_name|topic|text|translation|notes</p>
+        <textarea id="bulkInput" placeholder="phrase|A1|1|daily|greetings|How are you?|¿Cómo estás?|saludo básico"></textarea>
         <div class="import-actions">
           <button id="btnImportBulk" type="button" class="btn-primary">Importar listado</button>
           <button id="btnLoadSample" type="button" class="btn-secondary">Cargar ejemplo</button>

@@ -26,14 +26,14 @@ const LS_CACHE = "english_study_cache_v1";
 const LS_PENDING = "english_study_pending_v1";
 
 const REQUIRED_COLUMNS = [
-  "id","type","level","group_name","topic","text","translation","notes",
+  "id","type","level","group_name","view_name","topic","text","translation","notes",
   "known","starred","created_at","updated_at","owner_email"
 ];
 
-const SAMPLE_BULK = `phrase|A1|1|daily|How are you?|¿Cómo estás?|saludo básico
-phrase|A1|1|daily|I am learning English.|Estoy aprendiendo inglés.|presente simple
-word|Core|1|tech|server|servidor|infraestructura
-phrase|Tech|1|programming|I need to update the server.|Necesito actualizar el servidor.|frase técnica`;
+const SAMPLE_BULK = `phrase|A1|1|daily|greetings|How are you?|¿Cómo estás?|saludo básico
+word|A1|1|daily|greetings|hello|hola|
+word|A1|1|daily|pronouns|I|yo|
+phrase|A1|1|daily|introductions|My name is...|Mi nombre es...|`;
 
 const headerSyncPill = document.getElementById("syncPill");
 const btnConnect = document.getElementById("btnConnect");
@@ -41,12 +41,16 @@ const btnRefresh = document.getElementById("btnRefresh");
 const accountPill = document.getElementById("accountPill");
 
 const viewMode = document.getElementById("viewMode");
+const topicFilter = document.getElementById("topicFilter");
+const statusFilter = document.getElementById("statusFilter");
+const typeFilter = document.getElementById("typeFilter");
+const ownerFilter = document.getElementById("ownerFilter");
+const translationMode = document.getElementById("translationMode");
+
 const levelFilter = document.getElementById("levelFilter");
 const groupFilter = document.getElementById("groupFilter");
 const searchInput = document.getElementById("searchInput");
 const btnClearSearch = document.getElementById("btnClearSearch");
-const statusFilter = document.getElementById("statusFilter");
-const topicFilter = document.getElementById("topicFilter");
 const sortMode = document.getElementById("sortMode");
 
 const statTotal = document.getElementById("statTotal");
@@ -87,7 +91,7 @@ let oauthExpiresAt = 0;
 let saveTimer = null;
 let saving = false;
 let connectInFlight = null;
-let showTranslations = true;
+let translationDisplayMode = "both";
 let localVersion = 0;
 
 // =====================
@@ -105,12 +109,33 @@ function normalizeStr(value) {
   return (value ?? "").toString().trim();
 }
 
+function normalizeKeyText(value) {
+  return (value ?? "")
+    .toString()
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[’‘`´]/g, "'")
+    .replace(/\s+/g, " ");
+}
+
+function buildItemKey(raw = {}) {
+  const type = normalizeStr(raw.type).toLowerCase() === "word" ? "word" : "phrase";
+
+  const view = normalizeKeyText(raw.view_name || raw.view || "default_view");
+  const topic = normalizeKeyText(raw.topic || "default_topic");
+  const text = normalizeKeyText(raw.text);
+
+  return `${type}|${view}|${topic}|${text}`;
+}
+
 function normalizeItem(raw = {}) {
   return {
     id: normalizeStr(raw.id) || uuid(),
     type: normalizeStr(raw.type).toLowerCase() === "word" ? "word" : "phrase",
     level: normalizeStr(raw.level) || "Core",
     group_name: normalizeStr(raw.group_name || raw.group || "1"),
+    view_name: normalizeStr(raw.view_name || raw.view || ""),
     topic: normalizeStr(raw.topic) || "general",
     text: normalizeStr(raw.text),
     translation: normalizeStr(raw.translation),
@@ -130,17 +155,35 @@ function toBool(v) {
 }
 
 function dedupItems(arr) {
-  const seen = new Set();
-  const out = [];
+  const map = new Map();
+
   for (const raw of arr || []) {
     const it = normalizeItem(raw);
     if (!it.text) continue;
-    const key = it.id || (it.type + "|" + it.level + "|" + it.group_name + "|" + it.text.toLowerCase());
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(it);
+
+    const key = buildItemKey(it);
+    const prev = map.get(key);
+
+    if (!prev) {
+      map.set(key, it);
+      continue;
+    }
+
+    const prevTime = new Date(prev.updated_at || prev.created_at || 0).getTime();
+    const nextTime = new Date(it.updated_at || it.created_at || 0).getTime();
+
+    if (nextTime >= prevTime) {
+      map.set(key, {
+        ...prev,
+        ...it,
+        id: prev.id || it.id,
+        created_at: prev.created_at || it.created_at || nowIso(),
+        updated_at: it.updated_at || nowIso()
+      });
+    }
   }
-  return out;
+
+  return [...map.values()];
 }
 
 function toast(msg, type = "ok", small = "") {
@@ -489,13 +532,21 @@ async function verifyBackendAccessOrThrow(allowInteractive) {
 // DATA FLOW
 // =====================
 function buildFilters() {
-  const levels = [...new Set(items.map(it => it.level).filter(Boolean))].sort();
-  const groups = [...new Set(items.map(it => it.group_name).filter(Boolean))].sort((a,b) => String(a).localeCompare(String(b), undefined, { numeric:true }));
+  const views = [...new Set(items.map(it => it.view_name).filter(Boolean))].sort();
   const topics = [...new Set(items.map(it => it.topic).filter(Boolean))].sort();
+  const levels = [...new Set(items.map(it => it.level).filter(Boolean))].sort();
+  const groups = [...new Set(items.map(it => it.group_name).filter(Boolean))].sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { numeric: true })
+  );
+  const types = [...new Set(items.map(it => it.type).filter(Boolean))].sort();
+  const owners = [...new Set(items.map(it => it.owner_email).filter(Boolean))].sort();
 
+  fillSelect(viewMode, views, "Todas");
+  fillSelect(topicFilter, topics, "Todos");
   fillSelect(levelFilter, levels, "Todos");
   fillSelect(groupFilter, groups, "Todos");
-  fillSelect(topicFilter, topics, "Todos");
+  fillSelect(typeFilter, types, "Todos");
+  fillSelect(ownerFilter, owners, "Todos");
 }
 
 function fillSelect(select, values, firstLabel) {
@@ -525,31 +576,42 @@ function applyStudyModeLayout() {
 
 function getVisibleItems() {
   const query = normalizeStr(searchInput.value).toLowerCase();
+  const selectedView = viewMode.value;
+  const topic = topicFilter.value;
   const status = statusFilter.value;
-  const mode = viewMode.value;
+  const type = typeFilter.value;
+  const owner = ownerFilter.value;
   const level = levelFilter.value;
   const group = groupFilter.value;
-  const topic = topicFilter.value;
   const sort = sortMode.value;
 
   let out = items.filter(it => {
-    if (mode !== "all") {
-      if (mode === "phrases" && it.type !== "phrase") return false;
-      if (mode === "words" && it.type !== "word") return false;
-    }
-    if (level && it.level !== level) return false;
-    if (group && it.group_name !== group) return false;
+    if (selectedView && it.view_name !== selectedView) return false;
     if (topic && it.topic !== topic) return false;
     if (status === "known" && !it.known) return false;
     if (status === "unknown" && it.known) return false;
     if (status === "starred" && !it.starred) return false;
+    if (type && it.type !== type) return false;
+    if (owner && it.owner_email !== owner) return false;
+    if (level && it.level !== level) return false;
+    if (group && it.group_name !== group) return false;
 
     if (query) {
       const hay = [
-        it.text, it.translation, it.notes, it.level, it.group_name, it.topic, it.type
+        it.text,
+        it.translation,
+        it.notes,
+        it.level,
+        it.group_name,
+        it.view_name,
+        it.topic,
+        it.type,
+        it.owner_email
       ].join(" ").toLowerCase();
+
       if (!hay.includes(query)) return false;
     }
+
     return true;
   });
 
@@ -563,8 +625,16 @@ function getVisibleItems() {
     out.sort((a, b) => {
       const lvl = a.level.localeCompare(b.level, undefined, { sensitivity: "base" });
       if (lvl !== 0) return lvl;
+
       const grp = String(a.group_name).localeCompare(String(b.group_name), undefined, { numeric: true });
       if (grp !== 0) return grp;
+
+      const view = String(a.view_name).localeCompare(String(b.view_name), undefined, { sensitivity: "base" });
+      if (view !== 0) return view;
+
+      const topicCmp = String(a.topic).localeCompare(String(b.topic), undefined, { sensitivity: "base" });
+      if (topicCmp !== 0) return topicCmp;
+
       return a.text.localeCompare(b.text, undefined, { sensitivity: "base" });
     });
   }
@@ -611,14 +681,15 @@ function render() {
       <div class="study-item-top">
         <div class="item-main">
           <div class="item-badges">
+            ${it.view_name ? `<span class="badge">${escapeHtml(it.view_name)}</span>` : ``}
             <span class="badge">${escapeHtml(it.type)}</span>
             <span class="badge">${escapeHtml(it.level)}</span>
             <span class="badge">Grupo ${escapeHtml(it.group_name)}</span>
             <span class="badge">${escapeHtml(it.topic || "general")}</span>
           </div>
 
-          <div class="item-text">${escapeHtml(it.text)}</div>
-          <div class="item-translation ${showTranslations ? "" : "hidden"}">${escapeHtml(it.translation || "")}</div>
+          ${translationDisplayMode !== "translation" ? `<div class="item-text">${escapeHtml(it.text)}</div>` : ``}
+          ${translationDisplayMode !== "english" ? `<div class="item-translation">${escapeHtml(it.translation || "")}</div>` : ``}
           ${it.notes ? `<div class="item-notes">${escapeHtml(it.notes)}</div>` : ``}
         </div>
 
@@ -663,32 +734,65 @@ function updateItem(id, patch = {}) {
   scheduleSave("Cambios guardados");
 }
 
-function addOneItem(raw) {
+function addOneItem(raw, options = {}) {
+  const { silent = false, deferRender = false, deferSave = false } = options;
+
   const it = normalizeItem(raw);
   if (!it.text) {
-    toast("Falta el texto principal", "warn");
-    return false;
+    if (!silent) toast("Falta el texto principal", "warn");
+    return { ok: false, mode: "invalid" };
   }
 
-  const exists = items.some(x =>
-    x.type === it.type &&
-    x.level.toLowerCase() === it.level.toLowerCase() &&
-    x.group_name.toLowerCase() === it.group_name.toLowerCase() &&
-    x.text.toLowerCase() === it.text.toLowerCase()
-  );
+  const key = buildItemKey(it);
 
-  if (exists) {
-    toast("Ese item ya existe", "warn", it.text);
-    return false;
+  const matches = items.filter(x => buildItemKey(x) === key);
+
+  if (matches.length > 0) {
+    const previous = matches.reduce((best, current) => {
+      const bestTime = new Date(best.updated_at || best.created_at || 0).getTime();
+      const currentTime = new Date(current.updated_at || current.created_at || 0).getTime();
+      return currentTime >= bestTime ? current : best;
+    });
+
+    const updatedItem = normalizeItem({
+      ...previous,
+      ...it,
+      id: previous.id || it.id,
+      created_at: previous.created_at || it.created_at || nowIso(),
+      updated_at: nowIso()
+    });
+
+    items = items.filter(x => buildItemKey(x) !== key);
+    items.push(updatedItem);
+    items = dedupItems(items);
+
+    localVersion++;
+    saveCache();
+
+    if (!deferRender) render();
+    if (!deferSave) scheduleSave("Item sobreescrito");
+
+    if (!silent) {
+      toast("Item actualizado", "ok", `${updatedItem.text} → ${updatedItem.topic}`);
+    }
+
+    return { ok: true, mode: "updated", item: updatedItem };
   }
 
   items.push(it);
   items = dedupItems(items);
+
   localVersion++;
   saveCache();
-  render();
-  scheduleSave("Item agregado");
-  return true;
+
+  if (!deferRender) render();
+  if (!deferSave) scheduleSave("Item agregado");
+
+  if (!silent) {
+    toast("Item agregado", "ok", `${it.text} → ${it.topic}`);
+  }
+
+  return { ok: true, mode: "added", item: it };
 }
 
 function deleteItem(id) {
@@ -705,16 +809,20 @@ function deleteItem(id) {
 
 function parseBulkLine(line) {
   const parts = line.split("|").map(x => x.trim());
-  if (parts.length < 6) return null;
+
+  // Formato esperado:
+  // type|level|group_name|view_name|topic|text|translation|notes
+  if (parts.length < 8) return null;
 
   return {
     type: parts[0] || "phrase",
     level: parts[1] || "Core",
     group_name: parts[2] || "1",
-    topic: parts[3] || "general",
-    text: parts[4] || "",
-    translation: parts[5] || "",
-    notes: parts[6] || ""
+    view_name: parts[3] || "",
+    topic: parts[4] || "general",
+    text: parts[5] || "",
+    translation: parts[6] || "",
+    notes: parts[7] || ""
   };
 }
 
@@ -763,24 +871,33 @@ async function scheduleSave(reason = "") {
     try {
       const startedVersion = localVersion;
       const payloadItems = items.map(normalizeItem);
-      if (!payloadItems.length) {
-        setPending(payloadItems);
-        setSync("offline", "No se guardó (vacío)");
-        return;
-      }
 
-      let saved = await apiCall("set", { items: payloadItems, expectedUpdatedAt: Number(remoteMeta.updatedAt || 0) }, { allowInteractive: false });
+      console.log("SAVE PAYLOAD", payloadItems);
+
+      let saved = await apiCall(
+        "set",
+        { items: payloadItems, expectedUpdatedAt: Number(remoteMeta.updatedAt || 0) },
+        { allowInteractive: false }
+      );
 
       if (!saved?.ok && saved?.error === "conflict") {
         const remoteItems = Array.isArray(saved?.items) ? saved.items : [];
         const merged = mergeRemoteWithLocal(remoteItems, items);
-        const saved2 = await apiCall("set", { items: merged, expectedUpdatedAt: Number(saved?.meta?.updatedAt || 0) }, { allowInteractive: false });
+
+        const saved2 = await apiCall(
+          "set",
+          { items: merged, expectedUpdatedAt: Number(saved?.meta?.updatedAt || 0) },
+          { allowInteractive: false }
+        );
+
         if (!saved2?.ok) throw new Error(saved2?.error || "set_failed");
+
         saved = saved2;
         items = dedupItems(merged);
       }
 
       if (!saved?.ok) throw new Error(saved?.error || "set_failed");
+
       remoteMeta = { updatedAt: Number(saved?.meta?.updatedAt || 0) };
 
       if (localVersion !== startedVersion) {
@@ -791,12 +908,17 @@ async function scheduleSave(reason = "") {
       }
 
       clearPending();
+
+      await refreshFromRemote(false);
+
       saveCache();
       render();
       setSync("ok", "Guardado ✅");
       btnRefresh.classList.add("hidden");
+
       if (reason) toast("Guardado ✅", "ok", reason);
     } catch (e) {
+      console.error("SAVE ERROR", e);
       setPending(items);
       setSync("offline", "No se pudo guardar");
       btnRefresh.classList.remove("hidden");
@@ -808,21 +930,10 @@ async function scheduleSave(reason = "") {
 }
 
 function mergeRemoteWithLocal(remoteItems, localItems) {
-  const map = new Map();
-
-  for (const raw of remoteItems || []) {
-    const it = normalizeItem(raw);
-    if (!it.text) continue;
-    map.set(it.id, it);
-  }
-
-  for (const raw of localItems || []) {
-    const it = normalizeItem(raw);
-    if (!it.text) continue;
-    map.set(it.id, it);
-  }
-
-  return dedupItems([...map.values()]);
+  return dedupItems([
+    ...(remoteItems || []).map(normalizeItem),
+    ...(localItems || []).map(normalizeItem)
+  ]);
 }
 
 async function refreshFromRemote(showToast = false, opts = { skipEnsureToken: false }) {
@@ -974,25 +1085,60 @@ async function reconnectAndRefresh() {
 // EVENTS
 // =====================
 btnImportBulk.addEventListener("click", () => {
-  const lines = bulkInput.value.split("\n").map(x => x.trim()).filter(Boolean);
+  const lines = bulkInput.value
+    .split("\n")
+    .map(x => x.trim())
+    .filter(Boolean);
+
   if (!lines.length) {
     toast("Pegá un listado primero", "warn");
     return;
   }
 
   let added = 0;
+  let updated = 0;
+  let invalid = 0;
+
   for (const line of lines) {
     const parsed = parseBulkLine(line);
-    if (!parsed) continue;
-    if (addOneItem(parsed)) added++;
+
+    if (!parsed) {
+      invalid++;
+      continue;
+    }
+
+    const result = addOneItem(parsed, {
+      silent: true,
+      deferRender: true,
+      deferSave: true
+    });
+
+    if (!result?.ok) {
+      invalid++;
+      continue;
+    }
+
+    if (result.mode === "updated") updated++;
+    if (result.mode === "added") added++;
   }
 
-  toast("Importación terminada", "ok", `${added} items agregados`);
+  items = dedupItems(items);
+  localVersion++;
+  saveCache();
+  render();
+  scheduleSave("Importación masiva");
+
+  toast(
+    "Importación terminada",
+    "ok",
+    `Agregados: ${added} | Actualizados: ${updated} | Inválidos: ${invalid}`
+  );
+
   bulkInput.value = "";
 });
 
 btnLoadSample.addEventListener("click", () => {
-  bulkInput.value = SAMPLE_BULK;
+  bulkInput.value = "";
 });
 
 btnExportProgress.addEventListener("click", () => {
@@ -1010,8 +1156,14 @@ btnExportItems.addEventListener("click", () => {
   exportJson("english-study-items.json", items);
 });
 
-[viewMode, levelFilter, groupFilter, statusFilter, topicFilter, sortMode].forEach(el => {
-  el.addEventListener("change", render);
+[viewMode, topicFilter, statusFilter, typeFilter, ownerFilter, translationMode, levelFilter, groupFilter, sortMode].forEach(el => {
+  if (!el) return;
+  el.addEventListener("change", () => {
+    if (el === translationMode) {
+      translationDisplayMode = translationMode.value || "both";
+    }
+    render();
+  });
 });
 
 searchInput.addEventListener("input", () => {
@@ -1184,9 +1336,8 @@ window.addEventListener("load", async () => {
 
   bulkInput.value = SAMPLE_BULK;
 
-  if ([...viewMode.options].some(o => o.value === "all")) {
-    viewMode.value = "all";
-  }
+  viewMode.value = "";
+  translationDisplayMode = translationMode?.value || "both";
 
   applyStudyModeLayout();
   render();

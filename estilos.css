@@ -43,6 +43,14 @@ p {
   display: none !important;
 }
 
+.mobile-only {
+  display: none !important;
+}
+
+.desktop-only {
+  display: block;
+}
+
 /* HEADER */
 
 .app-header {
@@ -171,9 +179,9 @@ p {
 
 .top-study-grid {
   display: grid;
-  grid-template-columns: minmax(420px, 0.95fr) minmax(420px, 1.05fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
-  align-items: center;
+  align-items: stretch;
 }
 
 .top-summary {
@@ -185,11 +193,15 @@ p {
   order: 2;
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: stretch;
 }
 
 .summary-card-inline {
   min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .summary-card-inline h2 {
@@ -287,7 +299,7 @@ textarea {
 .compact-toolbar {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   align-items: end;
 }
@@ -612,6 +624,14 @@ button:hover {
 
   .header-actions {
     display: contents;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
   }
 
   .sync-pill,
